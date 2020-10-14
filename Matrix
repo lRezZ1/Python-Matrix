@@ -1,0 +1,179 @@
+from copy import deepcopy
+import itertools
+import functools
+
+
+class MatrixError(BaseException):
+    def __init__(self, Matrix, other=None):
+        self.matrix1 = Matrix
+        self.matrix2 = other
+
+
+class Matrix():
+
+    @staticmethod
+    def transposed(matrix):
+        return deepcopy(matrix).transpose()
+
+    @staticmethod
+    def rows(matrix):
+        return len(matrix.matrix)
+
+    @staticmethod
+    def cols(matrix):
+        return len(matrix.matrix[0])
+
+    def __init__(self, matrix):
+        self.matrix = deepcopy(matrix)
+
+    def __str__(self):
+        return '\n'.join(
+            map(
+                lambda row: '\t'.join(map(str, row)),
+                self.matrix)
+        )
+
+    def size(self, rows=False, cols=False):
+        if rows:
+            return len(self.matrix)
+        elif cols:
+            return len(self.matrix[0])
+        return (len(self.matrix), len(self.matrix[0]))
+
+    def __add__(self, other):
+        if isinstance(other, Matrix) and self.size() == other.size():
+            return Matrix(
+                map(
+                    lambda rowA, rowB: map(lambda a, b: a + b, rowA, rowB),
+                    self.matrix,
+                    other.matrix
+                )
+            )
+        raise MatrixError(self, other)
+
+    def __mul__(self, other):
+        if isinstance(other, int) or isinstance(other, float):
+            return Matrix(
+                list(
+                    map(
+                        lambda row: list(map(lambda elem: elem * other, row)),
+                        self.matrix
+                    )
+                )
+            )
+        elif isinstance(other, Matrix):
+            if Matrix.cols(self) == Matrix.rows(other):
+                newOther = Matrix.transposed(other)
+                return Matrix(
+                    list(
+                        map(
+                            lambda z: list(
+                                itertools.starmap(
+                                    lambda g, h: functools.reduce(
+                                        lambda x, y: x + y,
+                                        map(lambda m, n: m * n, g, h), 0),
+                                    z
+                                )
+                            ),
+                            list(map(
+                                lambda i:
+                                list(
+                                    map(
+                                        lambda j:
+                                            (self.matrix[i],
+                                             newOther.matrix[j]),
+                                        range(Matrix.cols(other))
+                                    )
+                                ),
+                                range(Matrix.rows(self))
+                            )
+                            )
+                        )
+                    )
+                )
+            else:
+                raise MatrixError(self, other)
+
+    __rmul__ = __mul__
+
+    def transpose(self):
+        self.matrix = list(map(list, itertools.zip_longest(*self.matrix)))
+        return self
+
+    def det(self):
+        if Matrix.rows(self) != Matrix.cols(self):
+            raise MatrixError(self)
+        m = deepcopy(self)
+        determinant = 1
+        if m.matrix[0][0] == 0:
+            for i in range(1, len(m.matrix)):
+                if m.matrix[i][0] == 0:
+                    continue
+                else:
+                    m.matrix[0], m.matrix[i] = m.matrix[i], m.matrix[0]
+                    determinant *= m.matrix[0][0]
+                    x = 1 / m.matrix[0][0]
+                    for j in range(len(m.matrix[0])):
+                        m.matrix[0][j] = x * m.matrix[0][j]
+            if m.matrix[0][0] == 0:
+                return 0
+        else:
+            determinant *= m.matrix[0][0]
+            x = 1 / m.matrix[0][0]
+            for j in range(len(m.matrix[0])):
+                m.matrix[0][j] = x * m.matrix[0][j]
+        for i in range(1, len(m.matrix)):
+            if m.matrix[i][0] == 0:
+                continue
+            x = -m.matrix[i][0]
+            m.matrix[i] = list(
+                map(
+                    lambda elem1, elem2: elem1 + elem2,
+                    m.matrix[i],
+                    map(lambda elem: x * elem, m.matrix[0])
+                )
+            )
+        m = Matrix(m.matrix[1:])
+        m.transpose()
+        m = Matrix(m.matrix[1:])
+        while len(m.matrix) > 0:
+            return determinant * m.det()
+        return determinant
+
+    def recursiveDet(self):
+        n = Matrix.rows(self)
+        if n != Matrix.cols(self):
+            raise MatrixError(self)
+        if n == 1:
+            return self.matrix[0][0]
+        elif n == 2:
+            return self.matrix[0][0] * self.matrix[1][1] - \
+                   self.matrix[0][1] * self.matrix[1][0]
+        firstRow = self.matrix[0]
+        minors = []
+        while n > 2:
+            submatrix = Matrix(self.matrix[1:]).transpose()
+            minorsMatrix = list(
+                map(
+                    Matrix,
+                    itertools.combinations(submatrix, n - 1)
+                )
+            )
+            for i in range(len(minorsMatrix)):
+                minors.append(pow(-1, 2 + i) * minorsMatrix[i].recursiveDet() *
+                              firstRow[len(firstRow) - i - 1])
+            return pow(-1, n + 1) * sum(minors)
+
+    def solve(self, vector):
+        determ = self.det()
+        result = []
+        submatrix = Matrix(deepcopy(Matrix.transposed(self).matrix))
+        temp = submatrix.matrix[0]
+        submatrix.matrix[0] = vector
+        result.append(submatrix.det() / determ)
+        for i in range(1, len(self.matrix)):
+            submatrix.matrix[i - 1] = temp
+            temp = submatrix.matrix[i]
+            submatrix.matrix[i] = vector
+            result.append(submatrix.det() / determ)
+        return result
